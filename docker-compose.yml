@@ -36,8 +36,10 @@ services:
       - 1080:1080
       - 13117:13117
     networks:
-      - expose
-      - default
+      expose:
+        interface_name: eth-public
+      default:
+        interface_name: eth-internal
     
 
 networks:

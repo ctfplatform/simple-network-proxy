@@ -43,17 +43,11 @@ def main():
         proxies.append((local_port, remote_host, remote_port))
 
     def get_interface_ip(interface_name):
-        try:
-            addresses = netifaces.ifaddresses(interface_name)
-            if netifaces.AF_INET in addresses:
-                return addresses[netifaces.AF_INET][0]['addr']
-            else:
-                raise ValueError(f"No IPv4 address found for interface {interface_name}")
-        except (ValueError, KeyError, OSError) as e:
-            logger.error(f"Failed to get IP from interface {interface_name}: {e}")
-            logger.info("Falling back to hostname resolution")
-            hostname = socket.gethostname()
-            return socket.gethostbyname(hostname)
+        addresses = netifaces.ifaddresses(interface_name)
+        if netifaces.AF_INET in addresses:
+            return addresses[netifaces.AF_INET][0]['addr']
+        else:
+            raise ValueError(f"No IPv4 address found for interface {interface_name}")
 
     local_address = get_interface_ip('eth-internal')
     logger.info(f"Local address from eth-internal: {local_address}")
