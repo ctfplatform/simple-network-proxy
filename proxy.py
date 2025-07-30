@@ -5,7 +5,6 @@ import argparse
 import socket
 import subprocess
 import time
-import netifaces
 
 logging.basicConfig(level=logging.INFO)
 
@@ -42,15 +41,9 @@ def main():
         logger.info(f"Proxy: {local_port} -> {remote_host}:{remote_port}")
         proxies.append((local_port, remote_host, remote_port))
 
-    def get_interface_ip(interface_name):
-        addresses = netifaces.ifaddresses(interface_name)
-        if netifaces.AF_INET in addresses:
-            return addresses[netifaces.AF_INET][0]['addr']
-        else:
-            raise ValueError(f"No IPv4 address found for interface {interface_name}")
-
-    local_address = get_interface_ip('eth-internal')
-    logger.info(f"Local address from eth-internal: {local_address}")
+    hostname = socket.gethostname()
+    local_address = socket.gethostbyname(hostname)
+    logger.info(f"Local address: {local_address}")
 
     last_resolved_ips = {}
 
