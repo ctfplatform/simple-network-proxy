@@ -3,10 +3,13 @@ FROM ubuntu:24.04
 RUN --mount=type=cache,target=/var/cache/apt,id=apt-cache \
     --mount=type=cache,sharing=locked,target=/var/lib/apt,id=apt-lib \
     apt-get update && apt-get install -y \
-    iptables python3-minimal python3-netifaces tini
+    haproxy python3-minimal tini && \
+    mkdir -p /etc/haproxy /var/lib/haproxy
 
-COPY proxy.py /proxy.py
-COPY entrypoint.sh /entrypoint.sh
+COPY proxy.py /usr/local/bin/proxy
+RUN chmod 755 /usr/local/bin/proxy && \
+    chown -R haproxy:haproxy /etc/haproxy /var/lib/haproxy
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
+USER haproxy:haproxy
 
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/bin/python3", "/usr/local/bin/proxy"]

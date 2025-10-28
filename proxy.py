@@ -1,160 +1,127 @@
 #!/usr/bin/env python3
 
-import logging
 import argparse
-import socket
+import logging
+import os
+from pathlib import Path
+import re
 import subprocess
-import time
-import netifaces
+from textwrap import dedent
+
 
 logging.basicConfig(level=logging.INFO)
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
+
+CONFIG_PATH = Path("/etc/haproxy/haproxy.cfg")
 
 
-def main():
-    parser = argparse.ArgumentParser()
+def parse_args() -> list[tuple[int, str, int]]:
+    parser = argparse.ArgumentParser(
+        description="Generate an HAProxy configuration for simple TCP proxying.",
+    )
     parser.add_argument(
         "-p",
         "--proxy",
-        type=str,
+        dest="proxies",
         action="append",
-        help="Proxy configuration (format: local-port:remote-host:remote-port)",
+        help="Proxy mapping in the form local-port:remote-host:remote-port",
     )
-    args = parser.parse_args()
+    parsed = parser.parse_args()
 
-    if not args.proxy:
-        logger.error("No proxy configuration provided")
-        parser.print_help()
-        return
+    if not parsed.proxies:
+        parser.error("At least one --proxy mapping is required")
 
-    proxies = []
+    proxies: list[tuple[int, str, int]] = []
+    for raw in parsed.proxies:
+        parts = raw.split(":", maxsplit=2)
+        if len(parts) != 3:
+            parser.error(f"Invalid proxy definition '{raw}'")
+        local_port, remote_host, remote_port = parts
+        if not local_port.isdigit() or not remote_port.isdigit():
+            parser.error(f"Ports must be numeric in definition '{raw}'")
+        local = int(local_port)
+        remote = int(remote_port)
+        if local <= 0 or local > 65535 or remote <= 0 or remote > 65535:
+            parser.error(f"Ports must be within 1-65535 in definition '{raw}'")
+        if not remote_host:
+            parser.error(f"Remote host is missing in definition '{raw}'")
+        proxies.append((local, remote_host, remote))
 
-    for proxy in args.proxy:
-        local_port, remote_host, remote_port = proxy.split(":")
-        if not local_port.isdigit() or not remote_host or not remote_port.isdigit():
-            logger.error(f"Invalid proxy configuration: {proxy}")
-            parser.print_help()
-            return
+    return proxies
 
-        local_port = int(local_port)
-        remote_port = int(remote_port)
-        logger.info(f"Proxy: {local_port} -> {remote_host}:{remote_port}")
-        proxies.append((local_port, remote_host, remote_port))
 
-    def get_interface_ip(interface_name):
-        addresses = netifaces.ifaddresses(interface_name)
-        if netifaces.AF_INET in addresses:
-            return addresses[netifaces.AF_INET][0]['addr']
-        else:
-            raise ValueError(f"No IPv4 address found for interface {interface_name}")
+def sanitize_name(name: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9]+", "_", name)
+    return cleaned.strip("_") or "target"
 
-    local_address = get_interface_ip('eth-internal')
-    logger.info(f"Local address from eth-internal: {local_address}")
 
-    last_resolved_ips = {}
+def render_config(proxies: list[tuple[int, str, int]]) -> str:
+    sections = [
+        dedent(
+            """
+            global
+                log stdout format raw local0
 
-    # main loop
-    while True:
-        for local_port, remote_host, remote_port in proxies:
-            # resolve remote host
-            try:
-                remote_ip = socket.gethostbyname(remote_host)
-            except socket.gaierror:
-                logger.error(f"Failed to resolve remote host: {remote_host}")
-                continue
+            defaults
+                log global
+                mode tcp
+                option tcplog
+                timeout connect 10s
+                timeout client 10m
+                timeout server 10m
 
-            last_ip = last_resolved_ips.get((remote_host, remote_port), None)
-            if last_ip == remote_ip:
-                continue
-            if last_ip is not None:
-                subprocess.run(
-                    [
-                        "iptables",
-                        "-t",
-                        "nat",
-                        "-D",
-                        "PREROUTING",
-                        "-p",
-                        "tcp",
-                        "--dport",
-                        str(local_port),
-                        "-j",
-                        "DNAT",
-                        "--to-destination",
-                        f"{last_ip}:{remote_port}",
-                    ],
-                    check=True,
-                )
-                subprocess.run(
-                    [
-                        "iptables",
-                        "-t",
-                        "nat",
-                        "-D",
-                        "POSTROUTING",
-                        "-p",
-                        "tcp",
-                        "-d",
-                        last_ip,
-                        "--dport",
-                        str(remote_port),
-                        "-j",
-                        "SNAT",
-                        "--to-source",
-                        local_address,
-                    ],
-                    check=True,
-                )
-                logger.info(
-                    f"Proxy: {local_port} -> {remote_host}({last_ip}):({remote_port}) removed"
-                )
+            resolvers system
+                parse-resolv-conf
+                resolve_retries 3
+                timeout retry 1s
+                hold valid 10s
+            """
+        ).strip()
+    ]
 
-            last_resolved_ips[(remote_host, remote_port)] = remote_ip
+    for index, (local_port, remote_host, remote_port) in enumerate(proxies, start=1):
+        backend_name = f"be_{index}_{sanitize_name(remote_host) or index}"
+        frontend_name = f"fe_{index}_{local_port}"
+        sections.append(
+            dedent(
+                f"""
+                frontend {frontend_name}
+                    bind :{local_port}
+                    mode tcp
+                    default_backend {backend_name}
 
-            # Configure iptables
-            subprocess.run(
-                [
-                    "iptables",
-                    "-t",
-                    "nat",
-                    "-A",
-                    "PREROUTING",
-                    "-p",
-                    "tcp",
-                    "--dport",
-                    str(local_port),
-                    "-j",
-                    "DNAT",
-                    "--to-destination",
-                    f"{remote_ip}:{remote_port}",
-                ],
-                check=True,
-            )
-            subprocess.run(
-                [
-                    "iptables",
-                    "-t",
-                    "nat",
-                    "-A",
-                    "POSTROUTING",
-                    "-p",
-                    "tcp",
-                    "-d",
-                    remote_ip,
-                    "--dport",
-                    str(remote_port),
-                    "-j",
-                    "SNAT",
-                    "--to-source",
-                    local_address,
-                ],
-                check=True,
-            )
-            logger.info(
-                f"Proxy: {local_port} -> {remote_host}({remote_ip}):({remote_port}) configured"
-            )
-        time.sleep(1)
+                backend {backend_name}
+                    mode tcp
+                    balance roundrobin
+                    default-server check resolvers system init-addr libc,none
+                    server target {remote_host}:{remote_port}
+                """
+            ).strip()
+        )
+
+    return "\n\n".join(sections) + "\n"
+
+
+def write_config(content: str) -> None:
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(content, encoding="utf-8")
+
+
+def run_haproxy(config_path: Path) -> None:
+    subprocess.run(["haproxy", "-c", "-f", str(config_path)], check=True)
+    os.execvp("haproxy", ["haproxy", "-f", str(config_path), "-db"])
+
+
+def main() -> None:
+    proxies = parse_args()
+    for local, host, remote in proxies:
+        LOGGER.info("Proxy %s -> %s:%s", local, host, remote)
+
+    config = render_config(proxies)
+    write_config(config)
+    LOGGER.info("Wrote HAProxy configuration to %s", CONFIG_PATH)
+    run_haproxy(CONFIG_PATH)
 
 
 if __name__ == "__main__":
