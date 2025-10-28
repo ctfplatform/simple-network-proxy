@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/ctfplatform/simple-network-proxy/compare/v1.1.0...v2.0.0) (2025-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* This commit changes the proxy to a TCP proxy from a network proxy.
+
+### Features
+
+* change to TCP proxy from network proxy ([46e81c5](https://github.com/ctfplatform/simple-network-proxy/commit/46e81c5229c7f64c8f589a2fcf72a7764bf2e3bc))
+
 ## [1.1.0](https://github.com/ctfplatform/simple-network-proxy/compare/v1.0.1...v1.1.0) (2025-08-29)
 
 
