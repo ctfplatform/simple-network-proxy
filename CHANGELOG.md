@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.0](https://github.com/ctfplatform/simple-network-proxy/compare/v2.0.0...v2.1.0) (2025-11-01)
+
+
+### Features
+
+* add maxconn configuration ([c6b170f](https://github.com/ctfplatform/simple-network-proxy/commit/c6b170f610f260a40a8c5266b5a51e6267a0768a))
+* add maxconn configuration ([90cdf25](https://github.com/ctfplatform/simple-network-proxy/commit/90cdf250be11d03320ac1d9cdd8a1beb4cb79694))
+
 ## [2.0.0](https://github.com/ctfplatform/simple-network-proxy/compare/v1.1.0...v2.0.0) (2025-10-28)
 
 
