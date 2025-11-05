@@ -75,7 +75,7 @@ def render_config(proxies: list[tuple[int, str, int]], bind_ip: str) -> str:
             """
             global
                 log stdout format raw local0
-                maxconn 4096
+                maxconn 32768
 
             defaults
                 log global
