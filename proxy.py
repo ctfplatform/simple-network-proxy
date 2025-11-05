@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import netifaces
 import os
 from pathlib import Path
 import re
@@ -56,7 +57,19 @@ def sanitize_name(name: str) -> str:
     return cleaned.strip("_") or "target"
 
 
-def render_config(proxies: list[tuple[int, str, int]]) -> str:
+def get_interface_ip(interface_name: str) -> str:
+    """Get the IPv4 address of the specified network interface."""
+    try:
+        addrs = netifaces.ifaddresses(interface_name)
+        ipv4_info = addrs.get(netifaces.AF_INET)
+        if ipv4_info and len(ipv4_info) > 0:
+            return ipv4_info[0]['addr']
+    except (ValueError, KeyError):
+        pass
+    raise ValueError(f"Could not find IPv4 address for interface '{interface_name}'")
+
+
+def render_config(proxies: list[tuple[int, str, int]], bind_ip: str) -> str:
     sections = [
         dedent(
             """
@@ -88,7 +101,7 @@ def render_config(proxies: list[tuple[int, str, int]]) -> str:
             dedent(
                 f"""
                 frontend {frontend_name}
-                    bind :{local_port}
+                    bind {bind_ip}:{local_port}
                     mode tcp
                     default_backend {backend_name}
 
@@ -116,10 +129,15 @@ def run_haproxy(config_path: Path) -> None:
 
 def main() -> None:
     proxies = parse_args()
+    
+    # Get the IP address of eth-public interface
+    bind_ip = get_interface_ip("eth-public")
+    LOGGER.info("Binding to eth-public interface at %s", bind_ip)
+    
     for local, host, remote in proxies:
-        LOGGER.info("Proxy %s -> %s:%s", local, host, remote)
+        LOGGER.info("Proxy %s:%s -> %s:%s", bind_ip, local, host, remote)
 
-    config = render_config(proxies)
+    config = render_config(proxies, bind_ip)
     write_config(config)
     LOGGER.info("Wrote HAProxy configuration to %s", CONFIG_PATH)
     run_haproxy(CONFIG_PATH)
