@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.1](https://github.com/ctfplatform/simple-network-proxy/compare/v2.1.0...v2.1.1) (2025-11-05)
+
+
+### Bug Fixes
+
+* only listen at public interface ([29fae6a](https://github.com/ctfplatform/simple-network-proxy/commit/29fae6a7ab84c451d407c74dc8a941c4c6fb8008))
+* only listen at public interface ([4b3c355](https://github.com/ctfplatform/simple-network-proxy/commit/4b3c3557c914df433427403e3b2f524b12ff8ffb))
+
 ## [2.1.0](https://github.com/ctfplatform/simple-network-proxy/compare/v2.0.0...v2.1.0) (2025-11-01)
 
 
